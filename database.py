@@ -280,6 +280,10 @@ def transfer_money(from_user_id: int, to_user_id: int, amount: int) -> Tuple[boo
 def buy_prisoner(buyer_id: int, prisoner_id: int) -> Tuple[bool, str]:
     """Buy a prisoner from their current owner"""
     from game_logic import GameLogic
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting buy_prisoner: buyer={buyer_id}, prisoner={prisoner_id}")
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -287,6 +291,7 @@ def buy_prisoner(buyer_id: int, prisoner_id: int) -> Tuple[bool, str]:
     # Get prisoner info
     prisoner = get_user(prisoner_id)
     if not prisoner:
+        logger.warning(f"Prisoner {prisoner_id} not found")
         return False, "Заключённый не найден! 🔍"
     
     # Can't buy yourself

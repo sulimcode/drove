@@ -14,7 +14,8 @@ from database import (
     check_shield_status, get_db_connection, add_referral_points,
     get_sorted_prisoners, search_prisoners_by_username,
     admin_add_coins, admin_set_coins, admin_set_points, admin_get_all_users,
-    admin_get_user_by_username
+    admin_get_user_by_username, upgrade_prisoner, get_prisoner_upgrade_info,
+    get_profit_statistics
 )
 from keyboards import (
     get_main_menu, get_profile_keyboard, get_prisoners_keyboard,
@@ -354,7 +355,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check for admin commands (only for @ceosulim)
     elif update.effective_user.username == 'ceosulim' and text.startswith('/'):
         await handle_admin_command(update, context)
-    elif update.effective_user.username == 'ceosulim' and user_id in user_states and user_states[user_id] == 'admin_menu':
+    elif update.effective_user.username == 'ceosulim' and text.split()[0].lower() in ['addcoins', 'setcoins', 'setpoints']:
         await handle_admin_text_command(update, context)
     else:
         # Default response
@@ -564,13 +565,29 @@ async def show_prisoner_profile(query, prisoner_id):
 async def buy_prisoner_action(query, prisoner_id):
     """Handle prisoner purchase"""
     buyer_id = query.from_user.id
-    success, message = buy_prisoner(buyer_id, prisoner_id)
     
-    await query.edit_message_text(
-        message,
-        reply_markup=get_back_keyboard(),
-        parse_mode='HTML'
-    )
+    logger.info(f"Buy prisoner attempt: buyer_id={buyer_id}, prisoner_id={prisoner_id}")
+    
+    try:
+        success, message = buy_prisoner(buyer_id, prisoner_id)
+        
+        logger.info(f"Buy prisoner result: success={success}, message={message}")
+        
+        if success:
+            # Show success message and return to main menu
+            await query.edit_message_text(
+                f"✅ {message}",
+                reply_markup=get_main_menu(),
+                parse_mode='HTML'
+            )
+        else:
+            # Show error message and allow user to try again
+            await query.answer(message, show_alert=True)
+            # Refresh the prisoner profile
+            await show_prisoner_profile(query, prisoner_id)
+    except Exception as e:
+        logger.error(f"Error in buy_prisoner_action: {e}")
+        await query.answer("Произошла ошибка при покупке заключенного!", show_alert=True)
 
 async def show_balance_transfer(query):
     """Show balance and transfer options"""
@@ -893,6 +910,13 @@ async def upgrade_prisoner_action(query, prisoner_id):
 
 async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle admin slash commands"""
+    user = update.effective_user
+    
+    # Check if user is admin
+    if user.username != 'ceosulim':
+        await update.message.reply_text("❌ У вас нет прав доступа к этой команде!")
+        return
+    
     text = update.message.text
     user_id = update.effective_user.id
     
@@ -940,8 +964,20 @@ async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_admin_text_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle admin text commands"""
+    if not update.effective_user or not update.message:
+        return
+        
+    user = update.effective_user
+    
+    # Check if user is admin
+    if user.username != 'ceosulim':
+        await update.message.reply_text("❌ У вас нет прав доступа к этой команде!")
+        return
+    
     text = update.message.text.strip()
     user_id = update.effective_user.id
+    
+    logger.info(f"Admin command received: {text}")
     
     try:
         parts = text.split()
@@ -954,17 +990,17 @@ async def handle_admin_text_command(update: Update, context: ContextTypes.DEFAUL
         
         if command in ['addcoins', 'setcoins']:
             amount = int(parts[2])
-            user = admin_get_user_by_username(username)
+            target_user = admin_get_user_by_username(username)
             
-            if not user:
+            if not target_user:
                 await update.message.reply_text(f"Пользователь @{username} не найден.")
                 return
             
             if command == 'addcoins':
-                success = admin_add_coins(user['telegram_id'], amount)
+                success = admin_add_coins(target_user['telegram_id'], amount)
                 action = "добавлено"
             else:
-                success = admin_set_coins(user['telegram_id'], amount)
+                success = admin_set_coins(target_user['telegram_id'], amount)
                 action = "установлено"
             
             if success:
@@ -974,13 +1010,13 @@ async def handle_admin_text_command(update: Update, context: ContextTypes.DEFAUL
         
         elif command == 'setpoints':
             amount = float(parts[2])
-            user = admin_get_user_by_username(username)
+            target_user = admin_get_user_by_username(username)
             
-            if not user:
+            if not target_user:
                 await update.message.reply_text(f"Пользователь @{username} не найден.")
                 return
             
-            success = admin_set_points(user['telegram_id'], amount)
+            success = admin_set_points(target_user['telegram_id'], amount)
             
             if success:
                 await update.message.reply_text(f"✅ Пользователю @{username} установлено {amount} очков.")
@@ -990,7 +1026,8 @@ async def handle_admin_text_command(update: Update, context: ContextTypes.DEFAUL
         else:
             await update.message.reply_text("Неизвестная команда. Доступны: addcoins, setcoins, setpoints")
     
-    except (ValueError, IndexError):
+    except (ValueError, IndexError) as e:
+        logger.error(f"Error parsing admin command: {e}")
         await update.message.reply_text("Неверный формат команды.")
     
     # Clear admin state

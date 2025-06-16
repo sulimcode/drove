@@ -109,6 +109,14 @@ The bot is built using Python with the `python-telegram-bot` library and uses SQ
 - **Monitoring**: Comprehensive logging system for debugging and performance tracking
 
 ## Recent Changes
+- June 16, 2025: **CRITICAL FIXES APPLIED** - Resolved major functionality issues:
+  - Fixed admin commands not working due to incorrect handler registration in main.py
+  - Added regex-based filter for proper admin text command recognition
+  - Improved admin command processing with better error handling and logging
+  - Fixed user purchase functionality with enhanced logging for debugging
+  - Added safety checks to prevent null pointer exceptions in bot handlers
+  - All admin functions (addcoins, setcoins, setpoints, /users, /user) now working correctly
+  - User purchase system fully operational with proper transaction processing
 - June 16, 2025: Added advanced search and sorting functionality to prisoner finder
 - Implemented prisoner search by username/first name with partial matching
 - Added price-based sorting (ascending/descending) and random selection options
