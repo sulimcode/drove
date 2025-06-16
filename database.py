@@ -1036,3 +1036,110 @@ def check_shield_status(user_id: int) -> Dict:
         return {'has_shield': False, 'time_left': 0}
     
     return {'has_shield': True, 'time_left': hours_left}
+
+def admin_add_coins(user_id: int, amount: int) -> bool:
+    """Admin function to add coins to a user"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('UPDATE users SET balance = balance + ? WHERE telegram_id = ?', (amount, user_id))
+        
+        # Log admin transaction
+        cursor.execute('''
+            INSERT INTO transactions (to_user_id, amount, transaction_type, description)
+            VALUES (?, ?, 'admin_add', 'Админ начислил монеты')
+        ''', (user_id, amount))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error adding coins to user {user_id}: {e}")
+        return False
+
+def admin_set_coins(user_id: int, amount: int) -> bool:
+    """Admin function to set user's coins to specific amount"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('UPDATE users SET balance = ? WHERE telegram_id = ?', (amount, user_id))
+        
+        # Log admin transaction
+        cursor.execute('''
+            INSERT INTO transactions (to_user_id, amount, transaction_type, description)
+            VALUES (?, ?, 'admin_set', 'Админ установил баланс')
+        ''', (user_id, amount))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error setting coins for user {user_id}: {e}")
+        return False
+
+def admin_set_points(user_id: int, amount: float) -> bool:
+    """Admin function to set user's points to specific amount"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('UPDATE users SET points = ? WHERE telegram_id = ?', (amount, user_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error setting points for user {user_id}: {e}")
+        return False
+
+def admin_get_all_users() -> List[Dict]:
+    """Admin function to get all users with their data"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT 
+            u.telegram_id,
+            u.username,
+            u.first_name,
+            u.balance,
+            u.points,
+            u.price,
+            u.owner_id,
+            u.created_at,
+            owner.username as owner_username,
+            COUNT(prisoners.telegram_id) as prisoner_count
+        FROM users u
+        LEFT JOIN users owner ON u.owner_id = owner.telegram_id
+        LEFT JOIN users prisoners ON prisoners.owner_id = u.telegram_id
+        GROUP BY u.telegram_id
+        ORDER BY u.balance DESC
+    ''')
+    
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+def admin_get_user_by_username(username: str) -> Optional[Dict]:
+    """Admin function to get user by username"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT 
+            u.telegram_id,
+            u.username,
+            u.first_name,
+            u.balance,
+            u.points,
+            u.price,
+            u.owner_id,
+            u.created_at,
+            owner.username as owner_username,
+            COUNT(prisoners.telegram_id) as prisoner_count
+        FROM users u
+        LEFT JOIN users owner ON u.owner_id = owner.telegram_id
+        LEFT JOIN users prisoners ON prisoners.owner_id = u.telegram_id
+        WHERE u.username = ?
+        GROUP BY u.telegram_id
+    ''', (username,))
+    
+    row = cursor.fetchone()
+    return dict(row) if row else None

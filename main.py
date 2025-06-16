@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from database import init_database
 from bot_handlers import (
     start_handler, button_handler, message_handler, 
-    referral_handler, help_handler, set_bot_instance
+    referral_handler, help_handler, set_bot_instance, admin_handler
 )
 from scheduler import start_scheduler
 
@@ -46,6 +46,7 @@ def main():
     # Add handlers
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_handler))
+    application.add_handler(CommandHandler("admin", admin_handler))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     

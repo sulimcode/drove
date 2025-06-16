@@ -12,7 +12,9 @@ from database import (
     get_user_by_referral_code, update_user_info, send_prisoners_to_work,
     collect_work_rewards, get_work_status, buy_self_freedom, activate_shield,
     check_shield_status, get_db_connection, add_referral_points,
-    get_sorted_prisoners, search_prisoners_by_username
+    get_sorted_prisoners, search_prisoners_by_username,
+    admin_add_coins, admin_set_coins, admin_set_points, admin_get_all_users,
+    admin_get_user_by_username
 )
 from keyboards import (
     get_main_menu, get_profile_keyboard, get_prisoners_keyboard,
@@ -138,6 +140,36 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_menu(),
         parse_mode='HTML'
     )
+
+async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /admin command - only for @ceosulim"""
+    user = update.effective_user
+    
+    # Check if user is admin
+    if user.username != 'ceosulim':
+        await update.message.reply_text("❌ У вас нет прав доступа к этой команде!")
+        return
+    
+    # Store admin state
+    user_states[user.id] = 'admin_menu'
+    
+    admin_text = """
+🛡️ <b>АДМИН ПАНЕЛЬ</b>
+
+Доступные команды:
+• /users - список всех пользователей
+• /user @username - информация о пользователе
+• /addcoins @username количество - добавить монеты
+• /setcoins @username количество - установить количество монет
+• /setpoints @username количество - установить количество очков
+
+Или отправьте команду в формате:
+<code>addcoins @username 1000</code>
+<code>setcoins @username 5000</code>
+<code>setpoints @username 100</code>
+"""
+    
+    await update.message.reply_text(admin_text, parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline keyboard button presses"""
@@ -318,6 +350,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await send_notification(target_user['telegram_id'], notification_text)
             
             del user_states[user_id]
+    
+    # Check for admin commands (only for @ceosulim)
+    elif update.effective_user.username == 'ceosulim' and text.startswith('/'):
+        await handle_admin_command(update, context)
+    elif update.effective_user.username == 'ceosulim' and user_id in user_states and user_states[user_id] == 'admin_menu':
+        await handle_admin_text_command(update, context)
     else:
         # Default response
         await update.message.reply_text(
@@ -852,3 +890,109 @@ async def upgrade_prisoner_action(query, prisoner_id):
         await show_prisoner_details(query, prisoner_id)
     else:
         await query.answer(message, show_alert=True)
+
+async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin slash commands"""
+    text = update.message.text
+    user_id = update.effective_user.id
+    
+    if text == '/users':
+        users = admin_get_all_users()
+        if not users:
+            await update.message.reply_text("База данных пуста.")
+            return
+        
+        response = "👥 <b>Все пользователи:</b>\n\n"
+        for i, user in enumerate(users[:20]):  # Show first 20 users
+            name = user['username'] or user['first_name'] or f"ID{user['telegram_id']}"
+            response += f"{i+1}. @{name}\n"
+            response += f"   💰 Монеты: {user['balance']}\n"
+            response += f"   ⭐ Очки: {user['points']:.2f}\n"
+            response += f"   🏷️ Цена: {user['price']}\n"
+            response += f"   👥 Заключенных: {user['prisoner_count']}\n\n"
+        
+        if len(users) > 20:
+            response += f"... и еще {len(users) - 20} пользователей"
+        
+        await update.message.reply_text(response, parse_mode='HTML')
+    
+    elif text.startswith('/user '):
+        username = text[6:].strip().replace('@', '')
+        user = admin_get_user_by_username(username)
+        
+        if not user:
+            await update.message.reply_text(f"Пользователь @{username} не найден.")
+            return
+        
+        name = user['username'] or user['first_name'] or f"ID{user['telegram_id']}"
+        owner_name = user['owner_username'] or "Свободен"
+        
+        response = f"👤 <b>Информация о @{name}</b>\n\n"
+        response += f"🆔 ID: {user['telegram_id']}\n"
+        response += f"💰 Монеты: {user['balance']}\n"
+        response += f"⭐ Очки: {user['points']:.2f}\n"
+        response += f"🏷️ Цена: {user['price']}\n"
+        response += f"👑 Владелец: {owner_name}\n"
+        response += f"👥 Заключенных: {user['prisoner_count']}\n"
+        response += f"📅 Создан: {user['created_at'][:10]}"
+        
+        await update.message.reply_text(response, parse_mode='HTML')
+
+async def handle_admin_text_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin text commands"""
+    text = update.message.text.strip()
+    user_id = update.effective_user.id
+    
+    try:
+        parts = text.split()
+        if len(parts) < 3:
+            await update.message.reply_text("Неверный формат. Используйте: addcoins @username количество")
+            return
+        
+        command = parts[0].lower()
+        username = parts[1].replace('@', '')
+        
+        if command in ['addcoins', 'setcoins']:
+            amount = int(parts[2])
+            user = admin_get_user_by_username(username)
+            
+            if not user:
+                await update.message.reply_text(f"Пользователь @{username} не найден.")
+                return
+            
+            if command == 'addcoins':
+                success = admin_add_coins(user['telegram_id'], amount)
+                action = "добавлено"
+            else:
+                success = admin_set_coins(user['telegram_id'], amount)
+                action = "установлено"
+            
+            if success:
+                await update.message.reply_text(f"✅ Пользователю @{username} {action} {amount} монет.")
+            else:
+                await update.message.reply_text("❌ Ошибка при изменении баланса.")
+        
+        elif command == 'setpoints':
+            amount = float(parts[2])
+            user = admin_get_user_by_username(username)
+            
+            if not user:
+                await update.message.reply_text(f"Пользователь @{username} не найден.")
+                return
+            
+            success = admin_set_points(user['telegram_id'], amount)
+            
+            if success:
+                await update.message.reply_text(f"✅ Пользователю @{username} установлено {amount} очков.")
+            else:
+                await update.message.reply_text("❌ Ошибка при изменении очков.")
+        
+        else:
+            await update.message.reply_text("Неизвестная команда. Доступны: addcoins, setcoins, setpoints")
+    
+    except (ValueError, IndexError):
+        await update.message.reply_text("Неверный формат команды.")
+    
+    # Clear admin state
+    if user_id in user_states:
+        del user_states[user_id]

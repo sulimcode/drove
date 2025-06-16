@@ -117,6 +117,12 @@ The bot is built using Python with the `python-telegram-bot` library and uses SQ
 - Integrated search results with existing prisoner profile system
 - Added comprehensive keyboard layouts for search operations
 - June 16, 2025: Complete database reset performed - all test users and data cleared for fresh start with real players only
+- June 16, 2025: Implemented comprehensive admin system for @ceosulim with following features:
+  - Admin-only /admin command with full user management interface
+  - Database functions: admin_add_coins, admin_set_coins, admin_set_points, admin_get_all_users, admin_get_user_by_username
+  - Admin commands: /users (list all users), /user @username (view specific user), addcoins/setcoins/setpoints (modify user data)
+  - Added 5,000,000 coins to @ceosulim account (total balance: 10,000,302 coins)
+  - Integrated admin handlers into main bot application with proper command routing
 
 ## Changelog
 - June 16, 2025. Initial setup
